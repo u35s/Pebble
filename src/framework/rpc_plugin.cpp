@@ -43,6 +43,7 @@ int32_t ProtoBufRpcPlugin::HeadEncode(const RpcHead& rpc_head, uint8_t* buff, ui
         ProtoBufRpcHead pb_head;
         // pb_head.version         = rpc_head.m_version; // 暂时不需要版本号
         pb_head.msg_type        = rpc_head.m_message_type;
+        pb_head.node            = rpc_head.m_node;
         pb_head.session_id      = rpc_head.m_session_id;
         pb_head.function_name   = rpc_head.m_function_name;
 
@@ -82,6 +83,7 @@ int32_t ProtoBufRpcPlugin::HeadDecode(const uint8_t* buff, uint32_t buff_len, Rp
             rpc_head->m_version       = pb_head.version;
         }
         rpc_head->m_message_type  = pb_head.msg_type;
+        rpc_head->m_node          = pb_head.node;
         rpc_head->m_session_id    = pb_head.session_id;
         rpc_head->m_function_name = pb_head.function_name;
     } catch (TException e) {

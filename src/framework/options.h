@@ -138,7 +138,7 @@ extern const char* kProcReqTimeoutMs;
 
 // [log]
 #define DEFAULT_LOG_DEVICE      "FILE"
-#define DEFAULT_LOG_PRIORITY    "INFO"
+#define DEFAULT_LOG_PRIORITY    "DEBUG"
 #define DEFAULT_LOG_FILE_SIZE   10
 #define DEFAULT_LOG_ROLL_NUM    10
 #define DEFAULT_LOG_PATH        "./log"

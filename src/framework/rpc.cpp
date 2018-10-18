@@ -12,6 +12,7 @@
  */
 
 #include <sstream>
+#include <iostream>
 #include <string.h>
 
 #include "common/log.h"
@@ -31,6 +32,7 @@ private:
         m_start_time  = rhs.m_start_time;
         m_server_side = rhs.m_server_side;
     }
+
 public:
     RpcSession() {
         m_session_id  = 0;
@@ -95,7 +97,7 @@ int32_t IRpc::OnMessage(int64_t handle, const uint8_t* msg,
 
     if (msg_info) {
         head.m_arrived_ms = msg_info->_msg_arrived_ms;
-        head.m_dst = (IProcessor*)(msg_info->_src);
+        head.m_dst = reinterpret_cast<IProcessor*>(msg_info->_src);
     }
     const uint8_t* data = msg + head_len;
     uint32_t data_len   = msg_len - head_len;
@@ -151,6 +153,25 @@ int32_t IRpc::RemoveOnRequestFunction(const std::string& name) {
     return m_service_map.erase(name) == 1 ? kRPC_SUCCESS : kRPC_FUNCTION_NAME_UNEXISTED;
 }
 
+int32_t IRpc::AddNodeFunction(const uint8_t node, const int64_t handle) {
+    if (0 == node || handle <= 0) {
+        PLOG_ERROR("param invalid: node = %d, handle = %d", node, handle);
+        return kRPC_INVALID_PARAM;
+    }
+
+    if (false == m_node_map.insert({node, handle}).second) {
+        PLOG_ERROR("the node %d is existed", node);
+        return kRPC_NODE_SERVICE_EXISTED;
+    }
+
+    return kRPC_SUCCESS;
+}
+
+int32_t IRpc::RemoveNodeFunction(const uint8_t node, const int64_t handle) {
+    return m_node_map.erase(node) == 1 ? kRPC_SUCCESS : kRPC_FUNCTION_NAME_UNEXISTED;
+}
+
+
 void IRpc::GetResourceUsed(cxx::unordered_map<std::string, int64_t>* resource_info) {
     if (!resource_info) {
         return;
@@ -176,6 +197,8 @@ int32_t IRpc::SendRequest(int64_t handle,
         PLOG_ERROR_N_EVERY_SECOND(1, "param invalid: buff = %p, buff_len = %u", buff, buff_len);
         return kRPC_INVALID_PARAM;
     }
+
+    PLOG_DEBUG("send request,node:%d", rpc_head.m_node);
 
     // 发送请求
     int32_t ret = SendMessage(handle, rpc_head, buff, buff_len);
@@ -228,7 +251,7 @@ int32_t IRpc::BroadcastRequest(const std::string& name,
     }
 
     const uint8_t* msg_frag[] = { m_rpc_head_buff,    buff     };
-    uint32_t msg_frag_len[]   = { (uint32_t)head_len, buff_len };
+    uint32_t msg_frag_len[]   = { static_cast<uint32_t>(head_len), buff_len };
 
     int32_t num = m_broadcastv(name, sizeof(msg_frag) / sizeof(*msg_frag), msg_frag, msg_frag_len);
 
@@ -241,6 +264,9 @@ int32_t IRpc::SendResponse(uint64_t session_id, int32_t ret,
     cxx::unordered_map< uint64_t, cxx::shared_ptr<RpcSession> >::iterator it =
         m_session_map.find(session_id);
     if (m_session_map.end() == it) {
+        for (it = m_session_map.begin(); it != m_session_map.end(); it++) {
+            PLOG_DEBUG("now session %lu", it->first);
+        }
         PLOG_ERROR("session %lu not found", session_id);
         return kRPC_SESSION_NOT_FOUND;
     }
@@ -276,7 +302,7 @@ int32_t IRpc::SendMessage(int64_t handle, const RpcHead& rpc_head,
     }
 
     const uint8_t* msg_frag[] = { m_rpc_head_buff,    buff     };
-    uint32_t msg_frag_len[]   = { (uint32_t)head_len, buff_len };
+    uint32_t msg_frag_len[]   = { static_cast<uint32_t>(head_len), buff_len };
 
     // 消息原路返回，如果有消息来源，则返回到来源点，如果无消息来源，走默认发送流程
     int32_t send_ret = 0;
@@ -329,23 +355,27 @@ int32_t IRpc::ProcessRequest(int64_t handle, const RpcHead& rpc_head,
 
 int32_t IRpc::ProcessRequestImp(int64_t handle, const RpcHead& rpc_head,
     const uint8_t* buff, uint32_t buff_len) {
+    cxx::unordered_map<std::string, OnRpcRequest>::iterator it;
+    // const bool forward = rpc_head.m_node > kSERVICE_GATE && m_node_map.size()>0;
+    const bool forward =  m_node_map.size() > 0;
+    if (forward) {
+    } else {
+        it = m_service_map.find(rpc_head.m_function_name);
+        if (m_service_map.end() == it) {
+            PLOG_ERROR_N_EVERY_SECOND(1, "%s's request proc func not found", rpc_head.m_function_name.c_str());
+            ResponseException(handle, kRPC_UNSUPPORT_FUNCTION_NAME, rpc_head);
+            RequestProcComplete(rpc_head.m_function_name, kRPC_UNSUPPORT_FUNCTION_NAME,
+                rpc_head.m_arrived_ms > 0 ? TimeUtility::GetCurrentMS() - rpc_head.m_arrived_ms : 0);
+            return kRPC_UNSUPPORT_FUNCTION_NAME;
+        }
 
-    cxx::unordered_map<std::string, OnRpcRequest>::iterator it =
-        m_service_map.find(rpc_head.m_function_name);
-    if (m_service_map.end() == it) {
-        PLOG_ERROR_N_EVERY_SECOND(1, "%s's request proc func not found", rpc_head.m_function_name.c_str());
-        ResponseException(handle, kRPC_UNSUPPORT_FUNCTION_NAME, rpc_head);
-        RequestProcComplete(rpc_head.m_function_name, kRPC_UNSUPPORT_FUNCTION_NAME,
-            rpc_head.m_arrived_ms > 0 ? TimeUtility::GetCurrentMS() - rpc_head.m_arrived_ms : 0);
-        return kRPC_UNSUPPORT_FUNCTION_NAME;
-    }
-
-    if (kRPC_ONEWAY == rpc_head.m_message_type) {
-        cxx::function<int32_t(int32_t, const uint8_t*, uint32_t)> rsp; // NOLINT
-        int32_t ret = (it->second)(buff, buff_len, rsp);
-        RequestProcComplete(rpc_head.m_function_name, ret,
-            rpc_head.m_arrived_ms > 0 ? TimeUtility::GetCurrentMS() - rpc_head.m_arrived_ms : 0);
-        return ret;
+        if (kRPC_ONEWAY == rpc_head.m_message_type) {
+            cxx::function<int32_t(int32_t, const uint8_t*, uint32_t)> rsp; // NOLINT
+            int32_t ret = (it->second)(buff, buff_len, rsp);
+            RequestProcComplete(rpc_head.m_function_name, ret,
+                rpc_head.m_arrived_ms > 0 ? TimeUtility::GetCurrentMS() - rpc_head.m_arrived_ms : 0);
+            return ret;
+        }
     }
 
     // 请求处理也保持会话，方便扩展
@@ -361,11 +391,30 @@ int32_t IRpc::ProcessRequestImp(int64_t handle, const RpcHead& rpc_head,
 
     m_session_map[session->m_session_id] = session;
 
-    cxx::function<int32_t(int32_t, const uint8_t*, uint32_t)> rsp = cxx::bind( // NOLINT
+    if (forward) {
+        cxx::unordered_map<uint8_t, int64_t>::iterator it2;
+        uint8_t node = rpc_head.m_node;
+        PLOG_DEBUG("forward node service %d", node);
+        it2 = m_node_map.find(node);
+
+        if (m_node_map.end() == it2) {
+            return kRPC_NODE_SERVICE_UNEXISTED;
+        }
+
+        cxx::function<int32_t(int32_t ret, const uint8_t* buff, uint32_t buff_len)> rsp = cxx::bind( // NOLINT
+            &IRpc::SendResponse, this, session->m_session_id,
+            cxx::placeholders::_1, cxx::placeholders::_2, cxx::placeholders::_3);
+
+        RpcHead tmp_head(rpc_head);
+        tmp_head.m_session_id = GenSessionId();
+        return SendRequest(it2->second, tmp_head, buff, buff_len, rsp , 0);
+    } else {
+        cxx::function<int32_t(int32_t, const uint8_t*, uint32_t)> rsp = cxx::bind( // NOLINT
         &IRpc::SendResponse, this, session->m_session_id,
         cxx::placeholders::_1, cxx::placeholders::_2, cxx::placeholders::_3);
 
-    return (it->second)(buff, buff_len, rsp);
+        return (it->second)(buff, buff_len, rsp);
+    }
 }
 
 int32_t IRpc::ProcessResponse(const RpcHead& rpc_head,

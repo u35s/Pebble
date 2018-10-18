@@ -12,9 +12,8 @@ message CalResponse {
     required int32 c = 1;
 }
 
-// 计算服务
-service Calculator { // 暂时只提供加法计算
-    // 加法计算
-    rpc add(CalRequest) returns (CalResponse); // 计算两个整数的和
+service Calculator { 
+    rpc add(CalRequest) returns (CalResponse);
+    rpc sub(CalRequest) returns (CalResponse);
 }
 

@@ -59,6 +59,19 @@ cc_binary(
     ],
 )
 cc_binary(
+    name = 'gate',
+    srcs = [
+        'gate.cpp', 
+    ],
+    incs = [
+        '../../thirdparty/protobuf/include/',
+    ],
+    deps = [
+        ':calculator',
+        '//src/server/:pebble_server',
+    ],
+)
+cc_binary(
     name = 'server',
     srcs = [
         'server.cpp', 

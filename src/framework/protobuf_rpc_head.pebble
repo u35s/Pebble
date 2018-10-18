@@ -14,4 +14,5 @@ struct ProtoBufRpcHead {
     4: string function_name,        // 请求的服务，格式为service_name.function_name
     5: optional i32 timeout_ms,     // 请求超时时间，单位ms
     6: optional i64(u) timestamp,   // 消息产生时间戳
+    7: byte(u) node,                // 消息目的地
 }

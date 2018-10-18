@@ -40,17 +40,29 @@ public:
         response.set_c(c);
         rsp(pebble::kRPC_SUCCESS, response);
     }
+
+    virtual void sub(const ::example::CalRequest& request,
+        cxx::function<void(int32_t ret_code, const ::example::CalResponse& response)>& rsp)
+    {
+        int32_t a = request.a();
+        int32_t b = request.b();
+        int32_t c = a - b;
+        std::cout << "receive rpc request: " << a << " - " << b << " = " << c << std::endl;
+        ::example::CalResponse response;
+        response.set_c(c);
+        rsp(pebble::kRPC_SUCCESS, response);
+    }
 };
 
 void usage() {
     std::cout << "usage   : ./server url" << std::endl
-              << "default : url = tcp://127.0.0.1:9000" << std::endl;
+              << "default : url = tcp://127.0.0.1:9001" << std::endl;
 }
 
 int main(int argc, const char** argv) {
     usage();
 
-    std::string url("tcp://127.0.0.1:9000");
+    std::string url("tcp://127.0.0.1:9001");
     if (argc > 1) url.assign(argv[1]);
 
     // 初始化PebbleServer

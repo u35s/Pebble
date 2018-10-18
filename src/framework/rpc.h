@@ -37,6 +37,8 @@ typedef enum {
     kRPC_PROCESS_TIMEOUT         = kRPC_ERROR_BASE - 13,  // 服务处理超时
     kPRC_BROADCAST_FAILED        = kRPC_ERROR_BASE - 14,  // 广播失败
     kRPC_FUNCTION_NAME_UNEXISTED = kRPC_ERROR_BASE - 15,  // 服务名不存在
+    kRPC_NODE_SERVICE_EXISTED    = kRPC_ERROR_BASE - 16,  // NODE已存在
+    kRPC_NODE_SERVICE_UNEXISTED  = kRPC_ERROR_BASE - 17,  // NODE不存在
     kRPC_PEBBLE_RPC_ERROR_BASE   = kRPC_ERROR_BASE - 100, // PEBBE RPC错误码BASE
     kRPC_RPC_UTIL_ERROR_BASE     = kRPC_ERROR_BASE - 200, // RPC辅助工具错误码BASE
     kRPC_SYSTEM_OVERLOAD_BASE    = kRPC_ERROR_BASE - 300, // 系统过载BASE
@@ -76,6 +78,12 @@ typedef enum {
     kRPC_ONEWAY    = 4,
 } RpcMessageType;
 
+typedef enum {
+    kSERVICE_CENTER = 0x01,
+    kSERVICE_GATE   = 0x02,
+    kSERVICE_SCENE  = 0x03,
+} RpcNode;
+
 
 // 前置声明
 class SequenceTimer;
@@ -91,6 +99,7 @@ struct RpcHead {
     RpcHead() {
         m_version       = kVERSION_0;
         m_message_type  = kRPC_EXCEPTION;
+        m_node          = kSERVICE_SCENE;
         m_session_id    = 0;
         m_arrived_ms    = -1;
         m_dst           = NULL;
@@ -98,6 +107,7 @@ struct RpcHead {
     RpcHead(const RpcHead& rhs) {
         m_version       = rhs.m_version;
         m_message_type  = rhs.m_message_type;
+        m_node          = rhs.m_node;
         m_session_id    = rhs.m_session_id;
         m_function_name = rhs.m_function_name;
         m_arrived_ms    = rhs.m_arrived_ms;
@@ -106,11 +116,12 @@ struct RpcHead {
 
     int32_t     m_version;
     int32_t     m_message_type;
+    uint8_t     m_node;    // 消息目的地
     uint64_t    m_session_id;
     std::string m_function_name;
 
-    int64_t     m_arrived_ms; // 消息到达时间
-    IProcessor* m_dst;        // 非消息相关，标示消息来源模块，响应原路返回
+    int64_t     m_arrived_ms;      // 消息到达时间
+    IProcessor* m_dst;             // 非消息相关，标示消息来源模块，响应原路返回
 };
 
 /// @brief RPC异常结构定义
@@ -163,6 +174,20 @@ public:
     /// @return 0 成功
     /// @return 非0 失败 @see RpcErrorCode
     int32_t AddOnRequestFunction(const std::string& name, const OnRpcRequest& on_request);
+
+    /// @brief 添加消息转发映射
+    /// @param node
+    /// @param handle 网络句柄
+    /// @return 0 成功
+    /// @return 非0 失败 @see RpcErrorCode
+    int32_t AddNodeFunction(const uint8_t node, const int64_t handle);
+
+    /// @brief 注销消息转发映射
+    /// @param node
+    /// @param handle 网络句柄
+    /// @return 0 成功
+    /// @return 非0 失败 @see RpcErrorCode
+    int32_t RemoveNodeFunction(const uint8_t node, const int64_t handle);
 
     /// @brief 注销RPC请求处理函数(RPC服务)
     /// @param name RPC请求服务的名字
@@ -283,6 +308,7 @@ private:
 
 private:
     cxx::unordered_map<std::string, OnRpcRequest> m_service_map;
+    cxx::unordered_map<uint8_t, int64_t> m_node_map;
 
     uint8_t m_rpc_head_buff[1024];
     uint8_t m_rpc_exception_buff[10240];

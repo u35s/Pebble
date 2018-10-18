@@ -15,6 +15,7 @@
 
 #include "client/pebble_client.h"
 #include "common/string_utility.h"
+#include "common/log.h"
 #include "example/protobuf_rpc/calculator.rpc.pb.h"
 
 // 异步回调
@@ -50,10 +51,12 @@ int main(int argc,  char* argv[]) {
         std::cout << "new CalculatorClient failed, please check the detail info in log" << std::endl;
         return -1;
     }
+    // calculator_client->SetNode(::pebble::kSERVICE_SCENE);
 
     // 主循环
     int32_t i = 0;
     do {
+        ::pebble::Log::Instance().Flush();
         client.Update();
 
         // 异步调用
@@ -65,7 +68,7 @@ int main(int argc,  char* argv[]) {
         calculator_client->add(request, add_cb);
         i++;
 
-        usleep(10000);
+        usleep(1e6);
     } while (true);
 
     delete calculator_client;

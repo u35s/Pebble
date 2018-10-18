@@ -34,6 +34,13 @@ enum TMessageType {
     T_EXCEPTION  = 3,
     T_ONEWAY     = 4,
 };
+
+enum TNode {
+    T_CENTER     = 0x01,
+    T_GATE       = 0x02,
+    T_SCENE      = 0x03,
+};
+
 } // namespace protocol
 
 } // namespace dr
